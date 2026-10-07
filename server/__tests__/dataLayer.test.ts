@@ -88,6 +88,10 @@ async function dbTests() {
     const s = await repo.listResources({ userId: uid, q: word, limit: 200, offset: 0 });
     assert(s.items.some((x) => x.id === plain.id), `ricerca testuale "${word}" trova la risorsa`);
   }
+  // prefisso sui dati veri: ogni risorsa con una parola che inizia per "postgres" deve essere trovata
+  const pre = await getPool().query("SELECT id FROM resources WHERE user_id = $1 AND (title ~* '\\mpostgres' OR summary ~* '\\mpostgres' OR array_to_string(tags,' ') ~* '\\mpostgres')", [uid]);
+  const found = new Set((await repo.listResources({ userId: uid, q: "postgres", limit: 200, offset: 0 })).items.map((x) => x.id));
+  assert(pre.rows.length > 0 && pre.rows.every((r: any) => found.has(r.id)), `ricerca "postgres" trova tutte le ${pre.rows.length} risorse con parole che iniziano cosi'`);
   assert((await repo.listResources({ userId: uid, q: 'a "b c" -d OR e', limit: 5, offset: 0 })).total >= 0, "sintassi di ricerca con virgolette e OR accettata");
   for (const sort of ["newest", "oldest", "title", "title_desc", "type", "favorites"] as const) {
     assert((await repo.listResources({ userId: uid, sort, limit: 5, offset: 0 })).items.length > 0, `ordinamento ${sort}`);
@@ -127,7 +131,7 @@ async function dbTests() {
     assert((await httpGet(base, "/raw-files")).status === 200, "GET /raw-files");
     assert((await httpGet(base, "/raw-files/nonesiste/chunks")).status === 404, "GET /raw-files/nonesiste/chunks -> 404");
     const post = await fetch(base + "/resources", { method: "POST" });
-    assert(post.status === 404, "nessuna scrittura: POST /resources non esiste");
+    assert(post.status === 400, "POST /resources senza corpo valido e' rifiutato (le scritture si provano in test:data-write)");
   } finally {
     await new Promise((ok) => server.close(ok));
   }
