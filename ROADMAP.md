@@ -56,8 +56,8 @@ Principi: il database è l'unica fonte di verità; tutto ciò che è derivato (v
 | Componente | Funzione | Stato |
 |---|---|---|
 | PostgreSQL 18 | `uuidv7()` per gli id nuovi | ✅ |
-| PostgreSQL 18 | ricerca testuale bilingue | ✅ |
-| PostgreSQL 18 | `RETURNING OLD/NEW` per modifiche con valore prima/dopo (conflitti, registro) | ⬜ M1 parte 2 |
+| PostgreSQL 18 | ricerca testuale bilingue, con corrispondenza per prefisso (`to_tsquery('x:*')`) | ✅ |
+| PostgreSQL 18 | `RETURNING OLD/NEW` per modifiche con valore prima/dopo (conflitti, registro) | ✅ |
 | PostgreSQL 18 | autenticazione `scram-sha-256` al posto di MD5 (deprecato) | ⬜ configurazione del server |
 | pgvector 0.8.6 | indice HNSW con scansioni iterative (`hnsw.iterative_scan`) per i filtri | ⬜ M5 |
 | pgvector 0.8.6 | `halfvec` se l'embedding supera 2.000 dimensioni (limite indice `vector`) | ❓ dipende dal modello |
@@ -85,15 +85,22 @@ Vincolo di costo: solo modelli economici. I limiti sono imposti dal server, non 
 
 ## 6. Da fare
 
-### M1, parte 2: livello dati e rotte di lettura ✅ (scritture ⬜)
+### M1, parte 2: livello dati e rotte di lettura ✅
 - ✅ Collegamento condiviso a PostgreSQL (`server/db/pool.ts`), con `search_path` fissato su `public` e password nascosta negli errori.
 - ✅ `VaultRepository` (`server/db/vaultRepository.ts`): unico punto che conosce SQL; elenco con filtri (tipo, tag, preferiti), ricerca testuale e 6 ordinamenti, paginazione, lettura per id con relazioni, file grezzi (senza base64 nell'elenco) e pezzi.
-- ✅ Rotte di **sola lettura** `/api/data/status`, `/resources`, `/resources/:id`, `/raw-files`, `/raw-files/:id`, `/raw-files/:id/chunks`, con parametri validati (`server/routes/dataRoutes.ts`).
+- ✅ Rotte `GET /api/data/status`, `/resources`, `/resources/:id`, `/raw-files`, `/raw-files/:id`, `/raw-files/:id/chunks`, con parametri validati.
 - ✅ Porta configurabile con `PORT` (predefinita 3000).
-- ✅ Test (`npm run test:data`): 41 prove, incluso il confronto con il backup di origine (124 risorse, campi e metadati identici).
-- ⬜ Scritture (creazione, modifica, cancellazione, operazioni a blocchi) con `RETURNING OLD/NEW`: prossima tappa.
+- ✅ Test (`npm run test:data`): 40 prove, incluso il confronto con il backup di origine (124 risorse, campi e metadati identici).
+
+### M1, parte 3: scritture e ricerca per prefisso ✅
+- ✅ Scritture del repository, ognuna in una transazione: `createResource`, `upsertResource` (come `setDoc`), `patchResource` (modifica parziale), `deleteResource`, `batchResources` (tutte o nessuna, fino a 500 operazioni), file grezzi (`createRawFile`, `patchRawFile`, `deleteRawFile`) e `replaceChunks`.
+- ✅ **`RETURNING OLD/NEW`** (PostgreSQL 18): modifica e cancellazione restituiscono il valore di prima; l'upsert sa se ha creato o sostituito.
+- ✅ **Rilevamento dei conflitti**: con `expectedUpdatedAt` (corpo o `?expectedUpdatedAt=`) il server risponde 409 con `currentUpdatedAt` se la riga è cambiata. Le date hanno precisione al millisecondo, la stessa di JavaScript.
+- ✅ Le relazioni (`resource_relations`) si riallineano a ogni scrittura da `metadata.relations`.
+- ✅ Rotte `POST/PUT/PATCH/DELETE` su `/api/data/resources` e `/raw-files`, `POST /resources/batch`, `PUT /raw-files/:id/chunks`, con validazione (tipi, lunghezze, carattere NUL, massimo 500 operazioni). `userId` e `updatedAt` inviati dal client vengono ignorati.
+- ✅ **Ricerca per prefisso** (migrazione `003_search_prefix.sql`): l'ultima parola digitata vale anche come inizio di parola, quindi "postgres" trova "PostgreSQL". Non si applica tra virgolette, dopo `-`, con una sola lettera.
+- ✅ Test (`npm run test:data-write`): 92 prove in uno **schema temporaneo** che poi viene eliminato; a inizio e fine si verifica che i dati veri non siano cambiati.
 - ⬜ Correzione dei 2 errori `tsc` noti.
-- ❓ Ricerca per prefisso: oggi "postgres" non trova "PostgreSQL" (radici diverse). Da decidere se aggiungere la corrispondenza per prefisso.
 - Nota: fino a M4 le rotte `/api/data` non hanno autenticazione.
 
 ### M2: client LLM unico e ruoli ⬜
