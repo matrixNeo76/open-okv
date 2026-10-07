@@ -6,11 +6,12 @@ import { vaultRouter } from "./server/routes/vaultRoutes";
 import { captureRouter } from "./server/routes/captureRoutes";
 import { mcpRouter } from "./server/routes/mcpRoutes";
 import { webhookRouter } from "./server/routes/webhookRoutes";
+import { dataRouter } from "./server/routes/dataRoutes";
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // High-capacity JSON and URL-encoded body parser for documents and base64 media
 app.use(express.json({ limit: "60mb" }));
@@ -26,6 +27,7 @@ app.use("/api/vault", vaultRouter);
 app.use("/api", captureRouter);
 app.use("/api/mcp", mcpRouter);
 app.use("/api/webhook", webhookRouter);
+app.use("/api/data", dataRouter); // lettura da PostgreSQL (M1 parte 2)
 
 // Vite middleware & Static Production Server Setup
 async function startServer() {

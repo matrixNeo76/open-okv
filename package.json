@@ -12,9 +12,10 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "lint:utf8": "tsx server/scripts/lintUtf8Encoding.ts",
+    "test:data": "tsx server/__tests__/dataLayer.test.ts",
     "test:p0": "tsx server/__tests__/p0ContractSuite.test.ts",
     "test:cekikj": "tsx src/lib/cekikj/__tests__/cekikjSuite.test.ts",
-    "test": "npm run lint:utf8 && npm run test:p0"
+    "test": "npm run lint:utf8 && npm run test:p0 && npm run test:data"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

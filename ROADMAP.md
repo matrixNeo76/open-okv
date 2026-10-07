@@ -85,11 +85,16 @@ Vincolo di costo: solo modelli economici. I limiti sono imposti dal server, non 
 
 ## 6. Da fare
 
-### M1, parte 2: livello dati e rotte di lettura 🟡
-- ⬜ Interfaccia `VaultRepository` lato server, con una sola implementazione PostgreSQL (il resto del codice non conosce SQL).
-- ⬜ Rotte `/api/data/resources` e `/api/data/raw-files` (+ `chunks`): elenco, lettura, creazione, modifica, cancellazione, operazioni a blocchi. Prima solo lettura.
-- ⬜ Uso di `RETURNING OLD/NEW` nelle modifiche.
-- ⬜ Test del repository e delle rotte; correzione dei 2 errori `tsc` noti.
+### M1, parte 2: livello dati e rotte di lettura ✅ (scritture ⬜)
+- ✅ Collegamento condiviso a PostgreSQL (`server/db/pool.ts`), con `search_path` fissato su `public` e password nascosta negli errori.
+- ✅ `VaultRepository` (`server/db/vaultRepository.ts`): unico punto che conosce SQL; elenco con filtri (tipo, tag, preferiti), ricerca testuale e 6 ordinamenti, paginazione, lettura per id con relazioni, file grezzi (senza base64 nell'elenco) e pezzi.
+- ✅ Rotte di **sola lettura** `/api/data/status`, `/resources`, `/resources/:id`, `/raw-files`, `/raw-files/:id`, `/raw-files/:id/chunks`, con parametri validati (`server/routes/dataRoutes.ts`).
+- ✅ Porta configurabile con `PORT` (predefinita 3000).
+- ✅ Test (`npm run test:data`): 41 prove, incluso il confronto con il backup di origine (124 risorse, campi e metadati identici).
+- ⬜ Scritture (creazione, modifica, cancellazione, operazioni a blocchi) con `RETURNING OLD/NEW`: prossima tappa.
+- ⬜ Correzione dei 2 errori `tsc` noti.
+- ❓ Ricerca per prefisso: oggi "postgres" non trova "PostgreSQL" (radici diverse). Da decidere se aggiungere la corrispondenza per prefisso.
+- Nota: fino a M4 le rotte `/api/data` non hanno autenticazione.
 
 ### M2: client LLM unico e ruoli ⬜
 - ⬜ `server/llm/llmClient.ts` con `generate({ role, prompt, schema, files? })`; `generateWithGeminiFallback` resta come involucro compatibile finché i 22 chiamanti non sono migrati.
