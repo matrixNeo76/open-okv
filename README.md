@@ -22,7 +22,8 @@ Principi: il database è l'unica fonte di verità; vettori, grafo e copia per gl
 - [x] **M1 (parte 1)** schema PostgreSQL, migrazioni, ricerca testuale italiano/inglese e importatore del backup
 - [x] **M1 (parte 2)** livello dati (`VaultRepository`) e rotte di lettura `/api/data`
 - [x] **M1 (parte 3)** scritture con transazioni e rilevamento dei conflitti, operazioni a blocchi, ricerca per prefisso
-- [ ] **M2** client LLM unico (OpenRouter), ruoli e registro dei costi con limiti di spesa
+- [x] **M2a** client LLM unico (OpenRouter): ruoli, registro dei costi e limiti di spesa applicati dal server
+- [ ] **M2b/M2c** PDF e immagini, audio, rerank, decisioni, ricerca web
 - [ ] **M3** frontend senza accesso diretto a Firestore
 - [ ] **M4** pannello admin e autenticazione
 - [ ] **M5** ricerca vettoriale e grafo (pgvector, AGE)
@@ -77,7 +78,24 @@ npm run build     # interfaccia (vite) e server (esbuild) in dist/
 npm run dev       # server di sviluppo (porta con PORT=3001)
 npm run test:data # prove di lettura (con DATABASE_URL anche sul database)
 npm run test:data-write # prove di scrittura, in uno schema temporaneo che non tocca i dati veri
+npm run test:llm  # prove del client dei modelli con un OpenRouter finto (nessun costo)
 ```
+
+## Modelli e controllo della spesa
+
+Le chiamate ai modelli passano da **ruoli** (`llm_roles`): ogni ruolo ha modello, riserve, parametri e limiti. Il server controlla i limiti **prima** di ogni chiamata e registra ogni tentativo in `llm_usage`.
+
+| Variabile | Significato |
+|---|---|
+| `OPENROUTER_API_KEY` | chiave di OpenRouter, solo nell'ambiente del server. Senza chiave nessuna chiamata parte |
+| `LLM_DISABLED=1` | interruttore d'emergenza: blocca tutte le chiamate |
+| `LLM_PROVIDER=gemini` | (provvisorio, fino a M2c) usa ancora il vecchio percorso Gemini |
+| `OPENROUTER_BASE_URL` | solo per i test (OpenRouter finto) |
+
+- Limiti predefiniti: 0,02 $ per richiesta, 1 $ al giorno e 10 $ al mese per ruolo, 2 $ al giorno e 15 $ al mese in totale, 20 richieste al minuto. Sono modificabili in `llm_roles` e `llm_settings`.
+- Consumo: `GET /api/llm/usage` (oggi, mese, per ruolo, ultimi problemi).
+- **Consiglio:** imposta anche un limite di spesa sulla chiave dal sito di OpenRouter, come ultima difesa.
+- Prova con chiamate vere e budget massimo: `npx tsx server/scripts/llmLiveCheck.ts --max-usd 0.05`.
 
 ## Configurazione e sicurezza
 

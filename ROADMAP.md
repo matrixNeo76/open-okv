@@ -103,13 +103,30 @@ Vincolo di costo: solo modelli economici. I limiti sono imposti dal server, non 
 - ⬜ Correzione dei 2 errori `tsc` noti.
 - Nota: fino a M4 le rotte `/api/data` non hanno autenticazione.
 
-### M2: client LLM unico e ruoli ⬜
-- ⬜ `server/llm/llmClient.ts` con `generate({ role, prompt, schema, files? })`; `generateWithGeminiFallback` resta come involucro compatibile finché i 22 chiamanti non sono migrati.
-- ⬜ Adattatori OpenRouter per testo e visione, poi PDF/file, decisione (Jev), audio, rerank, immagini, voce, video.
-- ⬜ Conversione dagli schemi Gemini (`Type.OBJECT`) a JSON Schema; parametri per ruolo e per modello.
-- ⬜ Tabelle `llm_roles` e `llm_usage`; costo letto da `usage.cost` della risposta.
-- ⬜ **Limiti di spesa** per richiesta, giorno, mese, frequenza e interruttore di blocco per ruolo, controllati prima di ogni chiamata.
-- ⬜ Sostituto della ricerca web di Gemini (SearXNG, da valutare).
+### M2a: nucleo del client LLM con controllo della spesa ✅
+- ✅ Migrazione `004_llm.sql`: `llm_settings` (interruttore generale, tetti giornaliero e mensile su tutti i ruoli, fuso orario), `llm_roles` (modello, riserve, parametri, limiti) e `llm_usage` (registro di **ogni** tentativo, anche bloccato o fallito). Ruoli iniziali: `extraction` e `agentic` accesi, `vision` spento fino a M2b.
+- ✅ `server/llm/llmClient.ts`: `generate({ role, prompt, schema })` verso OpenRouter, con riserve (al massimo 2), parametri per ruolo e per modello, conversione dello schema Gemini in JSON Schema, controllo del JSON e dei campi richiesti.
+- ✅ **Controllo della spesa, applicato dal server prima di ogni chiamata:**
+  - la chiamata non parte senza chiave, senza registro dei costi o senza prezzo noto (fail closed);
+  - si stima il costo **massimo** (ingresso stimato per eccesso + `max_tokens`, sempre inviato e mai oltre 32.000) con i prezzi reali del catalogo OpenRouter;
+  - limiti per richiesta, frequenza, giorno e mese, per ruolo e in generale, più interruttori (generale, per ruolo, `LLM_DISABLED=1`);
+  - verifica e riserva avvengono nella stessa transazione, sotto un blocco: richieste contemporanee non possono superare insieme un limite;
+  - costo reale letto da `usage.cost`; se manca conta la stima; un timeout conta la stima intera; costo reale superiore alla stima = anomalia registrata;
+  - nessun tentativo nascosto; la chiave non compare mai nel registro.
+- ✅ `generateWithGeminiFallback` (stessa firma) passa dai ruoli e restituisce `null` se la chiamata è bloccata: i 39 chiamanti non cambiano. Il percorso Gemini resta solo con `LLM_PROVIDER=gemini`, fino a M2c.
+- ✅ Rotte di sola lettura `/api/llm/status`, `/roles`, `/usage` (consumo di oggi e del mese per ruolo, ultimi problemi).
+- ✅ `npm run test:llm`: 49 prove con un OpenRouter finto (nessun costo), in uno schema temporaneo. Verificato anche che i test **falliscano** se si rompono apposta il limite giornaliero, il blocco contro la concorrenza o il conteggio dei timeout.
+- ✅ Prova con chiamate vere (`server/scripts/llmLiveCheck.ts`, budget 0,05 $): 3 chiamate, costo reale 0,000161 $ registrato, uguale alla variazione dell'account OpenRouter (0,000162 $); il modello più caro del catalogo (stima 0,27 $), un modello senza prezzo e un limite stretto sono stati bloccati **prima** della chiamata.
+- ⬜ Limite di spesa **sulla chiave** nel sito di OpenRouter (ultima difesa, fuori dal codice): da impostare a mano.
+- ⬜ I limiti si modificano per ora nel database; il pannello admin arriva in M4.
+
+### M2b: PDF, immagini e file ⬜
+- ⬜ Ruolo `vision` (PDF e immagini in ingresso), sostituto dell'upload dei file (`filesAdapter`) e della cache di contesto (`contextCacheService`).
+
+### M2c: audio, immagini generate, rerank, decisioni, ricerca web ⬜
+- ⬜ Audio in testo, voce, video, generazione di immagini, rerank, decisioni con Jev (API in anteprima).
+- ⬜ Ricerca web con SearXNG al posto della ricerca di Gemini.
+- ⬜ Eliminazione del codice Gemini e di `LLM_PROVIDER`.
 
 ### M3: frontend senza Firestore ⬜
 - ⬜ Nuovo `src/lib/vaultApi.ts` al posto di `src/lib/firebase.ts`; sostituzione dei 12 file uno alla volta, dal meno rischioso.
@@ -138,6 +155,7 @@ Vincolo di costo: solo modelli economici. I limiti sono imposti dal server, non 
 
 ### Trasversale ⬜
 - ⬜ Test di integrazione e pipeline CI (tipi, lint, test, build) a ogni tappa.
+- ⬜ Limite di spesa sulla chiave OpenRouter (dal sito) come ultima difesa.
 - ⬜ Messa in sicurezza del database (`scram-sha-256`, accessi limitati all'host dell'app) e dell'API (oggi senza autenticazione dietro il proxy).
 - ❓ Gestione dei file di blocco: il progetto usa `bun.lock`, ma `npm ci` richiede `package-lock.json` (oggi ignorato).
 - ⬜ Documentazione di installazione e aggiornamento.

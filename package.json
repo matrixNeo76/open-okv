@@ -14,9 +14,10 @@
     "lint:utf8": "tsx server/scripts/lintUtf8Encoding.ts",
     "test:data": "tsx server/__tests__/dataLayer.test.ts",
     "test:data-write": "tsx server/__tests__/dataWrite.test.ts",
+    "test:llm": "tsx server/__tests__/llmClient.test.ts",
     "test:p0": "tsx server/__tests__/p0ContractSuite.test.ts",
     "test:cekikj": "tsx src/lib/cekikj/__tests__/cekikjSuite.test.ts",
-    "test": "npm run lint:utf8 && npm run test:p0 && npm run test:data && npm run test:data-write"
+    "test": "npm run lint:utf8 && npm run test:p0 && npm run test:data && npm run test:data-write && npm run test:llm"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
