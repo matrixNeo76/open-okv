@@ -12,7 +12,9 @@ import { fileURLToPath } from "node:url";
 import { geminiSchemaToJsonSchema, topLevelRequired } from "../llm/schemaConvert";
 import { cleanJson, generate, MAX_TOKENS_CEILING } from "../llm/llmClient";
 import { resetPriceCache, worstCaseUsd } from "../llm/pricing";
-import { roleForEndpoint } from "../llm/geminiCompat";
+import { normalizeContents, roleForEndpoint } from "../llm/geminiCompat";
+import { countPdfPages, estimateImageTokens, estimateMedia, imageDimensions, PDF_TOKENS_PER_PAGE } from "../llm/media";
+import { getModelPrice } from "../llm/pricing";
 import { redact, closePool, getPool, hasDatabase } from "../db/pool";
 
 let passed = 0;
@@ -36,7 +38,22 @@ const catalog = [
   { id: "test/backup2", pricing: { prompt: "0.000001", completion: "0.000002" } },
   { id: "test/pricey", pricing: { prompt: "0.001", completion: "0.002" } },
   { id: "test/router", pricing: { prompt: "-1", completion: "-1" } },
+  { id: "test/vision", pricing: { prompt: "0.0000001", completion: "0.0000005" }, architecture: { input_modalities: ["file", "image", "text"] } },
+  { id: "test/textonly", pricing: { prompt: "0.0000001", completion: "0.0000005" }, architecture: { input_modalities: ["text"] } },
+  { id: "test/tiered", pricing: { prompt: "0.000001", completion: "0.000002", overrides: [{ min_prompt_tokens: 272000, prompt: "0.000004", completion: "0.000008" }] }, architecture: { input_modalities: ["text", "image"] } },
 ];
+// file di prova (intestazioni minime, bastano per riconoscere formato e dimensioni)
+const pngBuf = (w: number, h: number) => {
+  const b = Buffer.alloc(40);
+  Buffer.from("89504e470d0a1a0a", "hex").copy(b);
+  b.writeUInt32BE(13, 8);
+  b.write("IHDR", 12, "latin1");
+  b.writeUInt32BE(w, 16);
+  b.writeUInt32BE(h, 20);
+  return b;
+};
+const pdfBuf = (pages: number) => Buffer.from("%PDF-1.4\n" + "<< /Type /Page >>\n".repeat(pages) + `<< /Type /Pages /Count ${pages} >>\n%%EOF`, "latin1");
+const b64 = (b: Buffer) => b.toString("base64");
 const seen: { model: string; body: any; auth: string }[] = [];
 let handler: (model: string, n: number) => Reply = () => okReply("{}");
 const okReply = (content: string, cost: number | null = 0.0004, extra: any = {}): Reply => ({
@@ -76,7 +93,34 @@ function pureTests() {
   assert(topLevelRequired(g).join() === "title,tags", "campi richiesti al primo livello");
   assert(cleanJson('```json\n{"a":1}\n```').ok === true && cleanJson("non json").ok === false && cleanJson("5").ok === false, "pulizia e controllo del JSON");
   assert(roleForEndpoint("/api/vault/agentic-dossier") === "agentic" && roleForEndpoint("/api/analyze-resource") === "extraction" && roleForEndpoint(undefined) === "extraction", "ruolo dalla rotta del chiamante");
-  const est = worstCaseUsd({ promptUsdPerToken: 1e-6, completionUsdPerToken: 2e-6, requestUsd: 0 }, 3000, 1000);
+  const jpeg = Buffer.alloc(40);
+  Buffer.from("ffd8ffc00011", "hex").copy(jpeg);
+  jpeg.writeUInt8(8, 6);
+  jpeg.writeUInt16BE(300, 7);
+  jpeg.writeUInt16BE(400, 9);
+  const gif = Buffer.alloc(20);
+  gif.write("GIF89a", 0, "latin1");
+  gif.writeUInt16LE(120, 6);
+  gif.writeUInt16LE(80, 8);
+  const webp = Buffer.alloc(40);
+  webp.write("RIFF", 0, "latin1");
+  webp.write("WEBP", 8, "latin1");
+  webp.write("VP8X", 12, "latin1");
+  webp.writeUIntLE(639, 24, 3);
+  webp.writeUIntLE(479, 27, 3);
+  const dj = (b: Buffer) => JSON.stringify(imageDimensions(b));
+  assert(dj(pngBuf(640, 480)) === '{"w":640,"h":480}' && dj(jpeg) === '{"w":400,"h":300}' && dj(gif) === '{"w":120,"h":80}' && dj(webp) === '{"w":640,"h":480}', "dimensioni di PNG, JPEG, GIF e WebP");
+  assert(imageDimensions(Buffer.from("non e' un'immagine")) === null, "formato sconosciuto -> nessuna dimensione");
+  assert(estimateImageTokens(pngBuf(640, 480)) === Math.ceil((640 * 480) / 512) + 100 && estimateImageTokens(pngBuf(9000, 9000)) === 20000, "token immagine: un token ogni 512 pixel, con tetto");
+  assert(countPdfPages(pdfBuf(7)) === 7 && countPdfPages(Buffer.from("%PDF-1.7 senza pagine riconoscibili")) === 1, "pagine PDF contate dagli oggetti /Page e da /Count");
+  assert(countPdfPages(Buffer.alloc(300000)) === 10, "senza indicazioni: una pagina ogni 30 KB (per eccesso)");
+  const me = estimateMedia([{ kind: "pdf", mimeType: "application/pdf", base64: b64(pdfBuf(4)) }, { kind: "image", mimeType: "image/png", base64: b64(pngBuf(100, 100)) }]);
+  assert(me.pdfPages === 4 && me.images === 1 && me.tokens === 4 * PDF_TOKENS_PER_PAGE + estimateImageTokens(pngBuf(100, 100)), "stima complessiva dei file allegati");
+  assert(estimateMedia([{ kind: "pdf", mimeType: "application/pdf", base64: b64(Buffer.alloc(300000)), pages: 15 }]).pdfPages === 15, "se il numero esatto di pagine e' noto, la stima lo usa (non la regola prudente)");
+  const nc = normalizeContents([{ text: "ciao" }, { inlineData: { mimeType: "image/jpg", data: "AAAA" } }, { inlineData: { mimeType: "text/plain", data: Buffer.from("nota").toString("base64") } }]);
+  assert("text" in nc && nc.text === "ciao\n\nnota" && nc.media.length === 1 && nc.media[0].mimeType === "image/jpeg", "contenuti Gemini -> testo + file (image/jpg normalizzato, text/plain letto come testo)");
+  assert("unsupported" in normalizeContents([{ text: "x" }, { inlineData: { mimeType: "audio/mpeg", data: "AAAA" } }]) && "unsupported" in normalizeContents([{ fileData: { fileUri: "x" } }]), "audio e riferimenti a file remoti: non supportati");
+  const est = worstCaseUsd({ promptUsdPerToken: 1e-6, completionUsdPerToken: 2e-6, requestUsd: 0, modalities: ["text"] }, 3000, 1000);
   assert(Math.abs(est - ((1050) * 1e-6 + 1000 * 2e-6)) < 1e-12, "stima del massimo: ingresso (3 caratteri/token) + max_tokens in uscita");
 }
 
@@ -225,7 +269,7 @@ async function dbTests() {
 
     console.log("== concorrenza");
     await reset();
-    const est = worstCaseUsd({ promptUsdPerToken: 1e-6, completionUsdPerToken: 2e-6, requestUsd: 0 }, ("Analizza questo testo." + "\n\nRispondi SOLO con un oggetto JSON valido (nessun testo fuori dal JSON, nessun blocco markdown) conforme a questo JSON Schema:\n" + JSON.stringify(geminiSchemaToJsonSchema(schemaG))).length, 1000);
+    const est = worstCaseUsd({ promptUsdPerToken: 1e-6, completionUsdPerToken: 2e-6, requestUsd: 0, modalities: ["text"] }, ("Analizza questo testo." + "\n\nRispondi SOLO con un oggetto JSON valido (nessun testo fuori dal JSON, nessun blocco markdown) conforme a questo JSON Schema:\n" + JSON.stringify(geminiSchemaToJsonSchema(schemaG))).length, 1000);
     await q("UPDATE llm_roles SET daily_usd = $1 WHERE role = 'extraction'", [(est * 3.5).toFixed(6)]);
     handler = () => ({ ...okReply('{"title":"T","tags":[]}', 0.0001), delayMs: 400 });
     const burst = await Promise.all(Array.from({ length: 8 }, () => call()));
@@ -263,6 +307,64 @@ async function dbTests() {
     handler = () => okReply("testo libero");
     const free = await generate({ role: "extraction", prompt: "ciao" }, { db });
     assert(free.ok && (free as any).text === "testo libero" && seen[0].body.response_format === undefined, "senza schema: testo libero e nessun response_format");
+
+    console.log("== immagini e PDF (ruolo vision)");
+    const resetVision = async (set = "") => {
+      await reset();
+      await q(`UPDATE llm_roles SET enabled = true, model = 'test/vision', fallbacks = ARRAY['test/textonly'], per_request_usd = 1, daily_usd = 100, monthly_usd = 1000, max_per_minute = 1000,
+        params = '{"max_tokens": 1000, "reasoning": {"effort": "low"}, "timeout_ms": 2000, "structured": "json_object", "max_media_bytes": 20000000, "max_images": 3, "max_pdf_pages": 50}' WHERE role = 'vision'`);
+      if (set) await q(`UPDATE llm_roles SET ${set} WHERE role = 'vision'`);
+    };
+    const vcall = (media: any[], o: any = {}) => generate({ role: "vision", prompt: "Leggi il documento.", schema: schemaG, endpoint: "/api/convert-file-to-okf", media, ...o }, { db });
+    const png = { kind: "image", mimeType: "image/png", base64: b64(pngBuf(800, 600)) };
+    const pdf = (n: number, name = "carta.pdf") => ({ kind: "pdf", mimeType: "application/pdf", base64: b64(pdfBuf(n)), filename: name });
+    await resetVision();
+    let v = await vcall([png, pdf(3)]);
+    const vb = seen[0]?.body;
+    assert(v.ok && Array.isArray(vb.messages[0].content) && vb.messages[0].content[0].type === "text", "richiesta multimodale: contenuto a parti, prima il testo");
+    assert(vb.messages[0].content[1].type === "image_url" && vb.messages[0].content[1].image_url.url.startsWith("data:image/png;base64,"), "immagine come image_url con dati in base64");
+    assert(vb.messages[0].content[2].type === "file" && vb.messages[0].content[2].file.filename === "carta.pdf" && vb.messages[0].content[2].file.file_data.startsWith("data:application/pdf;base64,"), "PDF come parte file con nome e dati in base64");
+    assert(JSON.stringify(vb.plugins) === '[{"id":"file-parser","pdf":{"engine":"native"}}]', "modello che legge i file: motore PDF esplicito `native` (solo token)");
+    const rw1 = (await rows())[0];
+    assert(Number(rw1.reserved_usd) > 3 * PDF_TOKENS_PER_PAGE * 1e-7, "la stima del costo include i token dei file", String(rw1.reserved_usd));
+
+    await resetVision("model = 'test/textonly', fallbacks = ARRAY[]::text[]");
+    v = await vcall([pdf(2)]);
+    assert(v.ok && JSON.stringify(seen[0].body.plugins) === '[{"id":"file-parser","pdf":{"engine":"cloudflare-ai"}}]', "modello senza lettura nativa dei file: motore gratuito `cloudflare-ai`, mai Mistral OCR");
+    await resetVision("model = 'test/textonly', fallbacks = ARRAY['test/vision']");
+    v = await vcall([png]);
+    rw = await rows();
+    assert(v.ok && rw[0].status === "blocked" && rw[0].error.includes("non accetta immagini") && seen.length === 1 && seen[0].model === "test/vision", "immagine a un modello senza visione: bloccato prima della chiamata, risponde la riserva con visione", JSON.stringify(rw.map((x) => x.status + ":" + x.model)));
+    assert(!JSON.stringify(seen.map((x) => x.body)).includes("mistral"), "in nessuna richiesta compare `mistral-ocr`");
+
+    await resetVision();
+    const bigImg = { kind: "image", mimeType: "image/png", base64: b64(Buffer.concat([pngBuf(100, 100), Buffer.alloc(21_000_000)])) };
+    v = await vcall([bigImg]);
+    assert(!v.ok && seen.length === 0 && (v as any).reason.includes("troppo grandi"), "file oltre 20 MB: bloccato, nessuna chiamata");
+    v = await vcall([png, png, png, png]);
+    assert(!v.ok && seen.length === 0 && (v as any).reason.includes("troppe immagini"), "piu' immagini del tetto: bloccato, nessuna chiamata");
+    v = await vcall([pdf(60)]);
+    assert(!v.ok && seen.length === 0 && (v as any).reason.includes("PDF troppo lunghi"), "PDF oltre il tetto di pagine: bloccato, nessuna chiamata");
+    assert((await rows()).filter((x) => x.status === "blocked").length === 3, "i tre blocchi sono registrati");
+
+    await resetVision("per_request_usd = 0.01");
+    await q("UPDATE llm_roles SET fallbacks = ARRAY[]::text[], model = 'test/tiered' WHERE role = 'vision'");
+    v = await vcall([pdf(40)]);
+    assert(!v.ok && seen.length === 0 && (v as any).reason.includes("per richiesta"), "PDF di 40 pagine: la stima dei file supera il limite per richiesta -> bloccato prima");
+    const tp = await getModelPrice("test/tiered");
+    assert(tp!.promptUsdPerToken === 0.000004 && tp!.completionUsdPerToken === 0.000008, "prezzo con fasce: si usa la fascia piu' alta");
+
+    console.log("== involucro multimodale");
+    const { generateMultimodalWithGeminiFallback } = await import("../gemini/client");
+    await resetVision();
+    handler = () => okReply('{"title":"T","tags":["m"]}', 0.0002);
+    let mw = await generateMultimodalWithGeminiFallback([{ text: "Analizza" }, { inlineData: { mimeType: "application/pdf", data: b64(pdfBuf(2)) } }], schemaG, 45000, "/api/convert-file-to-okf", "gemini-3.8-flash");
+    assert(!!mw && JSON.parse(mw.text).tags[0] === "m" && seen[0].model === "test/vision" && rows !== undefined, "generateMultimodalWithGeminiFallback (stessa firma) passa dal ruolo vision; il modello Gemini preferito e' ignorato");
+    seen.length = 0;
+    mw = await generateMultimodalWithGeminiFallback([{ text: "Analizza" }, { inlineData: { mimeType: "audio/mpeg", data: "AAAA" } }], schemaG, 45000);
+    assert(mw === null && seen.length === 0, "audio: null senza chiamate e senza spesa (il chiamante usa la trascrizione)");
+    mw = await generateMultimodalWithGeminiFallback([{ text: "Solo testo" }], schemaG, 45000);
+    assert(!!mw && (await rows()).slice(-1)[0].role === "extraction", "senza file allegati e' una normale estrazione (ruolo extraction)");
 
     console.log("== involucro compatibile e rotte di consultazione");
     await reset();

@@ -150,7 +150,7 @@ export interface GeminiGenerateOptions {
   preferredModel?: string; // Optional user-chosen model
 }
 
-import { generateViaRoles } from "../llm/geminiCompat";
+import { generateMultimodalViaRoles, generateViaRoles } from "../llm/geminiCompat";
 
 export async function generateWithGeminiFallback(
   prompt: string,
@@ -289,6 +289,9 @@ export async function generateMultimodalWithGeminiFallback(
   endpoint = "/api/convert-file-to-okf",
   preferredModel?: string
 ): Promise<{ text: string; modelUsed: string } | null> {
+  // open-okv: testo + immagini/PDF passano dal ruolo `vision` (OpenRouter, limiti di spesa); audio e video restituiscono null.
+  if (process.env.LLM_PROVIDER !== "gemini") return generateMultimodalViaRoles(contents, schema, timeoutMs, endpoint);
+
   const ai = getGenAI();
   if (!ai) return null;
 

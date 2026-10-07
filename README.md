@@ -23,7 +23,9 @@ Principi: il database è l'unica fonte di verità; vettori, grafo e copia per gl
 - [x] **M1 (parte 2)** livello dati (`VaultRepository`) e rotte di lettura `/api/data`
 - [x] **M1 (parte 3)** scritture con transazioni e rilevamento dei conflitti, operazioni a blocchi, ricerca per prefisso
 - [x] **M2a** client LLM unico (OpenRouter): ruoli, registro dei costi e limiti di spesa applicati dal server
-- [ ] **M2b/M2c** PDF e immagini, audio, rerank, decisioni, ricerca web
+- [x] **M2b** PDF e immagini (ruolo `vision`, GPT 6 Luna, tetto di 1 $ al giorno)
+- [ ] **M2c** audio, immagini generate, rerank, decisioni, ricerca web
+- [ ] **M2d** agente a più passaggi (chiamate a funzioni) · **M2e** pulizia del codice Gemini
 - [ ] **M3** frontend senza accesso diretto a Firestore
 - [ ] **M4** pannello admin e autenticazione
 - [ ] **M5** ricerca vettoriale e grafo (pgvector, AGE)
@@ -95,7 +97,8 @@ Le chiamate ai modelli passano da **ruoli** (`llm_roles`): ogni ruolo ha modello
 - Limiti predefiniti: 0,02 $ per richiesta, 1 $ al giorno e 10 $ al mese per ruolo, 2 $ al giorno e 15 $ al mese in totale, 20 richieste al minuto. Sono modificabili in `llm_roles` e `llm_settings`.
 - Consumo: `GET /api/llm/usage` (oggi, mese, per ruolo, ultimi problemi).
 - **Consiglio:** imposta anche un limite di spesa sulla chiave dal sito di OpenRouter, come ultima difesa.
-- Prova con chiamate vere e budget massimo: `npx tsx server/scripts/llmLiveCheck.ts --max-usd 0.05`.
+- **PDF e immagini** (ruolo `vision`): inviati sempre al modello (GPT 6 Luna), motore PDF esplicito (`native` o gratuito, mai OCR a pagamento), tetti di 20 MB, 10 immagini e 100 pagine; massimo 1 $ al giorno.
+- Prove con chiamate vere e budget massimo: `npx tsx server/scripts/llmLiveCheck.ts --max-usd 0.05` (testo) e `npx tsx server/scripts/llmLiveCheckVision.ts --image FILE.png --pdf FILE.pdf --max-usd 0.5` (immagini e PDF).
 
 ## Configurazione e sicurezza
 

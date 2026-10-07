@@ -113,20 +113,30 @@ Vincolo di costo: solo modelli economici. I limiti sono imposti dal server, non 
   - verifica e riserva avvengono nella stessa transazione, sotto un blocco: richieste contemporanee non possono superare insieme un limite;
   - costo reale letto da `usage.cost`; se manca conta la stima; un timeout conta la stima intera; costo reale superiore alla stima = anomalia registrata;
   - nessun tentativo nascosto; la chiave non compare mai nel registro.
-- ✅ `generateWithGeminiFallback` (stessa firma) passa dai ruoli e restituisce `null` se la chiamata è bloccata: i 39 chiamanti non cambiano. Il percorso Gemini resta solo con `LLM_PROVIDER=gemini`, fino a M2c.
+- ✅ `generateWithGeminiFallback` (stessa firma) passa dai ruoli e restituisce `null` se la chiamata è bloccata: i chiamanti di questo contenitore non cambiano. **Attenzione:** alcuni punti usano direttamente l'SDK di Gemini e restano su Gemini finché non arrivano le tappe M2c e M2d (agente a più passaggi con chiamate a funzioni e cache di contesto, ricerca web, diagnostica dei log, trascrizione audio). Il percorso Gemini resta solo con `LLM_PROVIDER=gemini`, fino a M2e.
 - ✅ Rotte di sola lettura `/api/llm/status`, `/roles`, `/usage` (consumo di oggi e del mese per ruolo, ultimi problemi).
 - ✅ `npm run test:llm`: 49 prove con un OpenRouter finto (nessun costo), in uno schema temporaneo. Verificato anche che i test **falliscano** se si rompono apposta il limite giornaliero, il blocco contro la concorrenza o il conteggio dei timeout.
 - ✅ Prova con chiamate vere (`server/scripts/llmLiveCheck.ts`, budget 0,05 $): 3 chiamate, costo reale 0,000161 $ registrato, uguale alla variazione dell'account OpenRouter (0,000162 $); il modello più caro del catalogo (stima 0,27 $), un modello senza prezzo e un limite stretto sono stati bloccati **prima** della chiamata.
 - ⬜ Limite di spesa **sulla chiave** nel sito di OpenRouter (ultima difesa, fuori dal codice): da impostare a mano.
 - ⬜ I limiti si modificano per ora nel database; il pannello admin arriva in M4.
 
-### M2b: PDF, immagini e file ⬜
-- ⬜ Ruolo `vision` (PDF e immagini in ingresso), sostituto dell'upload dei file (`filesAdapter`) e della cache di contesto (`contextCacheService`).
+### M2b: PDF e immagini (ruolo `vision`) ✅
+- ✅ Il contenitore multimodale (`generateMultimodalWithGeminiFallback`, stessa firma) passa dal ruolo `vision`: immagini PNG, JPEG, WebP, GIF come `image_url` e PDF come parte `file`, sempre inviati al modello (**GPT 6 Luna**, per scelta dell'utente). Audio, video e riferimenti a file remoti restituiscono `null` senza spesa; senza file allegati la richiesta è una normale estrazione.
+- ✅ **Motore dei PDF sempre esplicito:** `native` (solo token) se il modello legge i file, altrimenti `cloudflare-ai` (gratuito). Il default di OpenRouter sarebbe Mistral OCR a pagamento (2 $ ogni 1.000 pagine): non viene mai usato.
+- ✅ **Spesa con file allegati:** stima prudente dei token di immagini (un token ogni 512 pixel, tetto 20.000) e PDF (3.000 token a pagina, con conteggio **esatto** delle pagine via `pdf-parse`); prezzi con fasce (si usa la più alta, es. oltre 272.000 token); tetti per ruolo in `params`: 20 MB, 10 immagini, 100 pagine; un modello senza visione non riceve immagini.
+- ✅ Migrazione `005_vision_role.sql`: ruolo `vision` acceso, GPT 6 Luna con riserva GLM 5.3 Flash, **massimo 1 $ al giorno** e 10 $ al mese, 0,05 $ per richiesta.
+- ✅ Test: 75 prove con OpenRouter finto. Prova vera (0,0075 $): logo letto, PDF di 15 pagine letto (titolo e 8 autori), pipeline reale degli articoli scientifici completata in 30 s con documento OKF di 6.279 caratteri, PDF da 120 pagine bloccato prima della chiamata; costi registrati = variazione dell'account OpenRouter (+0,007452 $). La stima dei file risulta circa 2 volte il reale.
+- ⬜ Modifica dei limiti per modello e funzionalità da pannello admin (tappa M4).
 
 ### M2c: audio, immagini generate, rerank, decisioni, ricerca web ⬜
-- ⬜ Audio in testo, voce, video, generazione di immagini, rerank, decisioni con Jev (API in anteprima).
-- ⬜ Ricerca web con SearXNG al posto della ricerca di Gemini.
-- ⬜ Eliminazione del codice Gemini e di `LLM_PROVIDER`.
+- ⬜ Trascrizione audio (oggi con l'upload dei file di Gemini), voce, video, **generazione di immagini**, rerank, decisioni con Jev (API in anteprima).
+- ⬜ Ricerca web con SearXNG al posto della ricerca di Gemini (`searchGroundingService`), diagnostica dei log (`telemetryRoutes`).
+
+### M2d: agente a più passaggi ⬜
+- ⬜ `executeAgenticVaultQuery` (`vaultAgents.ts`) usa le chiamate a funzioni di Gemini e la cache di contesto: serve un ciclo con chiamate a strumenti su OpenRouter e un sostituto della cache (cache dei prompt, se il modello la offre). Con le stesse regole di spesa.
+
+### M2e: pulizia ⬜
+- ⬜ Eliminazione del codice Gemini, di `contextCacheService`, `filesAdapter` e di `LLM_PROVIDER`.
 
 ### M3: frontend senza Firestore ⬜
 - ⬜ Nuovo `src/lib/vaultApi.ts` al posto di `src/lib/firebase.ts`; sostituzione dei 12 file uno alla volta, dal meno rischioso.
