@@ -20,7 +20,7 @@ Principi: il database è l'unica fonte di verità; vettori, grafo e copia per gl
 ## Stato della migrazione
 
 - [x] **M1 (parte 1)** schema PostgreSQL, migrazioni, ricerca testuale italiano/inglese e importatore del backup
-- [ ] **M1 (parte 2)** livello dati (`VaultRepository`) e rotte di lettura
+- [x] **M1 (parte 2)** livello dati (`VaultRepository`) e rotte di lettura `/api/data` (scritture nella tappa successiva)
 - [ ] **M2** client LLM unico (OpenRouter), ruoli e registro dei costi con limiti di spesa
 - [ ] **M3** frontend senza accesso diretto a Firestore
 - [ ] **M4** pannello admin e autenticazione
@@ -71,9 +71,10 @@ Note:
 
 ```bash
 npm run lint      # controllo dei tipi (oggi 2 errori noti in server/services/batchMigrationService.ts)
-npm test          # codifica UTF-8 e suite di contratto
+npm test          # codifica UTF-8, suite di contratto e prove del livello dati
 npm run build     # interfaccia (vite) e server (esbuild) in dist/
-npm run dev       # server di sviluppo
+npm run dev       # server di sviluppo (porta con PORT=3001)
+npm run test:data # solo prove del livello dati (con DATABASE_URL impostata fanno anche le prove sul database)
 ```
 
 ## Configurazione e sicurezza
