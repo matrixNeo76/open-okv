@@ -150,12 +150,18 @@ export interface GeminiGenerateOptions {
   preferredModel?: string; // Optional user-chosen model
 }
 
+import { generateViaRoles } from "../llm/geminiCompat";
+
 export async function generateWithGeminiFallback(
   prompt: string,
   schema: any,
   options: GeminiGenerateOptions | number = 6000,
   endpointFallback = "/api/analyze-resource"
 ): Promise<{ text: string; modelUsed: string } | null> {
+  // open-okv: il testo passa dai ruoli (OpenRouter, limiti di spesa). Il percorso Gemini resta solo con LLM_PROVIDER=gemini
+  // e sara' eliminato a fine M2c.
+  if (process.env.LLM_PROVIDER !== "gemini") return generateViaRoles(prompt, schema, options, endpointFallback);
+
   const ai = getGenAI();
   if (!ai) return null;
 

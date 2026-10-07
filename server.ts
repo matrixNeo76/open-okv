@@ -7,6 +7,7 @@ import { captureRouter } from "./server/routes/captureRoutes";
 import { mcpRouter } from "./server/routes/mcpRoutes";
 import { webhookRouter } from "./server/routes/webhookRoutes";
 import { dataRouter } from "./server/routes/dataRoutes";
+import { llmRouter } from "./server/llm/llmRoutes";
 
 dotenv.config();
 
@@ -27,7 +28,8 @@ app.use("/api/vault", vaultRouter);
 app.use("/api", captureRouter);
 app.use("/api/mcp", mcpRouter);
 app.use("/api/webhook", webhookRouter);
-app.use("/api/data", dataRouter); // lettura da PostgreSQL (M1 parte 2)
+app.use("/api/data", dataRouter); // PostgreSQL: letture e scritture (M1)
+app.use("/api/llm", llmRouter); // ruoli e consumo dei modelli, sola lettura (M2a)
 
 // Vite middleware & Static Production Server Setup
 async function startServer() {
