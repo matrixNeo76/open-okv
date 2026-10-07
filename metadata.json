@@ -1,0 +1,6 @@
+{
+  "name": "Knowledge Vault - Dev & AI Resources",
+  "description": "Applicativo web per la cattura rapida, archiviazione in Firestore e consultazione intelligente di articoli, repository GitHub, server MCP e AI skills.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

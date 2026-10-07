@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Resource": {
+      "collection": "resources",
+      "fields": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who owns this resource"
+        },
+        "type": {
+          "type": "string",
+          "description": "Category of resource: 'article' | 'github_repo' | 'mcp_server' | 'ai_skill' | 'knowledge' | 'link' | 'troubleshooting'",
+          "enum": ["article", "github_repo", "mcp_server", "ai_skill", "knowledge", "link", "troubleshooting"]
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the resource"
+        },
+        "url": {
+          "type": "string",
+          "description": "Original URL if applicable"
+        },
+        "rawInput": {
+          "type": "string",
+          "description": "Original text or link entered"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Comprehensive summary or description"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Categorization tags"
+        },
+        "isFavorite": {
+          "type": "boolean",
+          "description": "Whether resource is marked as favorite"
+        },
+        "metadata": {
+          "type": "map",
+          "description": "Specific metadata based on type (github stats, mcp command/args/env, skill prompt/model, article author/readTime)"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "Last update timestamp"
+        }
+      }
+    },
+    "RawFile": {
+      "collection": "raw_files",
+      "fields": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who owns this raw file"
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Original file name with extension"
+        },
+        "fileSize": {
+          "type": "number",
+          "description": "File size in bytes"
+        },
+        "fileType": {
+          "type": "string",
+          "description": "File type category (pdf, image, markdown, text, etc)"
+        },
+        "mimeType": {
+          "type": "string",
+          "description": "Standard MIME type"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["raw", "converting", "converted_okf", "error"],
+          "description": "Parsing and staging status"
+        },
+        "convertedResourceId": {
+          "type": "string",
+          "description": "ID of the resulting OKF resource if converted"
+        },
+        "convertedResourceTitle": {
+          "type": "string",
+          "description": "Title of the resulting OKF resource"
+        },
+        "contentPreview": {
+          "type": "string",
+          "description": "Short preview of text content"
+        },
+        "textContent": {
+          "type": "string",
+          "description": "Full text content for text files"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "Last update timestamp"
+        }
+      }
+    }
+  }
+}

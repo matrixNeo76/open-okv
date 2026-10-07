@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Knowledge Vault - Dev & AI Resources</title>
+    <meta name="description" content="Applicativo web per la cattura rapida, archiviazione in Firestore e consultazione intelligente di articoli, repository GitHub, server MCP e AI skills." />
+    <meta property="og:title" content="Knowledge Vault - Dev & AI Resources" />
+    <meta property="og:description" content="Applicativo web per la cattura rapida, archiviazione in Firestore e consultazione intelligente di articoli, repository GitHub, server MCP e AI skills." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+      // Filter out benign Vite HMR websocket reconnection errors in development sandbox
+      window.addEventListener('unhandledrejection', function(event) {
+        if (
+          event.reason &&
+          (typeof event.reason === 'string'
+            ? event.reason.includes('WebSocket') || event.reason.includes('vite')
+            : event.reason.message?.includes('WebSocket') ||
+              event.reason.message?.includes('ws:') ||
+              event.reason.message?.includes('failed to connect') ||
+              event.reason.toString?.().includes('WebSocket'))
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+    </script>
+  </head>
+  <body class="bg-[#050505] text-[#E0E0E0] antialiased selection:bg-[#C5A059]/30 selection:text-[#C5A059]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

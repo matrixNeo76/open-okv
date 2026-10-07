@@ -1,0 +1,28 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# dati locali e backup: mai nel repository
+data/
+
+# segreti e chiavi: mai nel repository
+*.pem
+*.key
+*.p12
+*.pfx
+*.bundle
+service-account*.json
+*-adminsdk-*.json
+.firebase/
+firebase-debug.log
+.env
+.env.*
+!.env.example
+
+# file di blocco alternativi (il progetto usa bun.lock)
+package-lock.json
